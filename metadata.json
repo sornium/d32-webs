@@ -1,0 +1,8 @@
+{
+  "name": "Remix: D32.Store",
+  "description": "Premium digital marketplace for subscriptions, game currency, high-quality proxies, and exclusive services with instant delivery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

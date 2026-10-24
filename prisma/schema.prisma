@@ -1,0 +1,347 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  customer
+  admin
+}
+
+enum UserStatus {
+  Active
+  Banned
+}
+
+enum AuthProvider {
+  Google
+  Discord
+  TikTok
+  Instagram
+  Email
+}
+
+enum ReviewStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum OrderStatus {
+  Pending
+  Paid
+  Preparing
+  Completed
+  Cancelled
+  Refunded
+}
+
+enum TicketStatus {
+  Open
+  In_Progress
+  Answered
+  Closed
+}
+
+enum WalletTransactionType {
+  CREDIT_REFUND
+  CREDIT_ADMIN
+  DEBIT_PURCHASE
+}
+
+model User {
+  id                String       @id @default(cuid())
+  userId            String       @unique @default(cuid())
+  username          String       @unique
+  email             String?      @unique
+  password          String?
+  role              Role         @default(customer)
+  authProvider      AuthProvider @default(Email)
+  providerAccountId String?
+  profilePicture    String?
+  discordId         String?      @unique
+  googleId          String?      @unique
+  tiktokId          String?
+  instagramId       String?
+  status            UserStatus   @default(Active)
+  twoFactorEnabled  Boolean      @default(false)
+  twoFactorRecoveryCodes String[] @default([])
+  lastLogin         DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  orders            Order[]
+  tickets           Ticket[]
+  wallet            Wallet?
+  policyAcceptances PolicyAcceptance[]
+  proxyListings     ProxyListing[] @relation("SellerProxies")
+  logs              Log[]
+
+  @@index([username])
+  @@index([email])
+  @@index([discordId])
+}
+
+model Wallet {
+  id           String              @id @default(cuid())
+  userId       String              @unique
+  user         User                @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  balance      Float               @default(0.0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  transactions WalletTransaction[]
+
+  @@index([userId])
+}
+
+model WalletTransaction {
+  id          String                @id @default(cuid())
+  walletId    String
+  wallet      Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  userId      String
+  amount      Float
+  type        WalletTransactionType
+  description String
+  orderId     String?
+  createdAt   DateTime              @default(now())
+
+  @@index([walletId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model PolicyAcceptance {
+  id                 String   @id @default(cuid())
+  userId             String?
+  user               User?    @relation(fields: [userId], references: [userId], onDelete: SetNull)
+  email              String
+  termsOfService     Boolean  @default(true)
+  privacyPolicy      Boolean  @default(true)
+  refundPolicy       Boolean  @default(true)
+  digitalGoodsPolicy Boolean  @default(true)
+  policyVersion      String   @default("2026.1")
+  ipAddress          String?
+  userAgent          String?
+  acceptedAt         DateTime @default(now())
+
+  @@index([email])
+  @@index([userId])
+}
+
+model EmailVerificationCode {
+  id         String   @id @default(cuid())
+  email      String
+  codeHash   String
+  type       String   // "signup" | "guest_checkout" | "login"
+  attempts   Int      @default(0)
+  verified   Boolean  @default(false)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SubCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  category    String   @default("DIGITAL")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  productId     String   @unique @default(cuid())
+  name          String
+  description   String?
+  category      String   @default("DIGITAL")
+  subCategory   String?  @default("Accounts")
+  brand         String?  @default("D32")
+  price         Float
+  originalPrice Float?
+  badge         String?
+  warrantyInfo  String?
+  featured      Boolean  @default(false)
+  stock         Int      @default(-1)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orders        Order[]
+
+  @@index([category])
+  @@index([brand])
+  @@index([subCategory])
+}
+
+model Review {
+  id                 String       @id @default(cuid())
+  reviewId           String       @unique @default(cuid())
+  userId             String?
+  discordId          String?
+  username           String?
+  displayName        String?
+  globalName         String?
+  avatarUrl          String?
+  profileUpdatedAt   DateTime?    @default(now())
+  rating             Int
+  reviewText         String
+  productId          String?
+  productName        String?
+  images             String[]     @default([])
+  isVerifiedPurchase Boolean      @default(false)
+  isDiscordVerified  Boolean      @default(false)
+  reported           Boolean      @default(false)
+  reportReason       String?
+  approvalStatus     ReviewStatus @default(Approved)
+  source             String       @default("Web")
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([discordId])
+  @@index([userId])
+  @@index([productId])
+  @@index([approvalStatus])
+  @@index([createdAt])
+}
+
+model Order {
+  id                String       @id @default(cuid())
+  orderId           String       @unique @default(cuid())
+  userId            String       @default("guest")
+  user              User?        @relation(fields: [userId], references: [userId], onDelete: SetNull)
+  productId         String?
+  product           Product?     @relation(fields: [productId], references: [productId], onDelete: SetNull)
+  cartItems         Json?        @default("[]")
+  quantity          Int          @default(1)
+  price             Float
+  currency          String       @default("USD")
+  ziinaIntentId     String?
+  paymentStatus     String?      @default("pending")
+  paymentError      String?
+  paymentVerifiedAt DateTime?
+  status            OrderStatus  @default(Pending)
+  assignedItemKey   String?
+  assignedItemNotes String?
+  assignedAt        DateTime?
+  assignedBy        String?
+  guestEmail        String?
+  guestAccessToken  String?
+  termsAcceptedAt   DateTime?
+  policyVersion     String?      @default("2026.1")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  tickets           Ticket[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([ziinaIntentId])
+  @@index([guestAccessToken])
+}
+
+model Ticket {
+  id            String          @id @default(cuid())
+  ticketId      String          @unique @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  orderId       String?
+  order         Order?          @relation(fields: [orderId], references: [orderId], onDelete: SetNull)
+  customerEmail String?
+  customerName  String?
+  subject       String
+  category      String          @default("General")
+  priority      String          @default("Medium")
+  status        TicketStatus    @default(Open)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  messages      TicketMessage[]
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([status])
+}
+
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [ticketId], onDelete: Cascade)
+  senderId   String
+  senderRole Role     @default(customer)
+  senderName String
+  message    String
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([createdAt])
+}
+
+model ProxyListing {
+  id         String   @id @default(cuid())
+  proxyId    String   @unique @default(cuid())
+  platform   String?
+  username   String?
+  followers  String?
+  bin        String?
+  co         String?
+  condition  String?
+  ogEmail    Boolean? @default(false)
+  status     String   @default("Pending")
+  sellerId   String?
+  seller     User?    @relation("SellerProxies", fields: [sellerId], references: [userId], onDelete: SetNull)
+  hasBadges  Boolean? @default(false)
+  badges     String[] @default([])
+  verified   Boolean? @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([sellerId])
+  @@index([status])
+}
+
+model BotSettings {
+  id               String  @id @default(cuid())
+  reviewChannelId  String?
+  logChannelId     String?
+  adminRoleId      String?
+  ticketCategoryId String?
+}
+
+model Log {
+  id          String   @id @default(cuid())
+  action      String
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [userId], onDelete: SetNull)
+  moderatorId String?
+  details     Json?
+  timestamp   DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([userId])
+}
+
+model ReservedUsername {
+  id             String   @id @default(cuid())
+  username       String   @unique
+  originalUserId String
+  reservedUntil  DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([username])
+}
